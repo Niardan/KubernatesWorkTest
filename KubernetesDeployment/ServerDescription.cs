@@ -11,7 +11,8 @@ namespace KubernetesWorkTest.KubernetesDeployment
         private string _name;
         private readonly string _idProject;
         private readonly string _domain;
-      
+        private Dictionary<string, string> _env;
+        public string BtlImage { set; get; }
         public ServerDescription(string domain, string idProject)
         {
             _domain = domain;
@@ -28,7 +29,9 @@ namespace KubernetesWorkTest.KubernetesDeployment
 
         public string Domain => _domain;
 
-        public void SetLabels(string idUser, string idServer)
+        public Dictionary<string, string> Env => _env;
+
+        public void Init(string idUser, string idServer, List<KubernetesPort> ports, Dictionary<string, string> env)
         {
             _labels = new Dictionary<string, string>
             {
@@ -38,12 +41,8 @@ namespace KubernetesWorkTest.KubernetesDeployment
                 {"domain", _domain},
             };
             _name = $"{idUser}-{idServer}-{_idProject}-{_domain}";
-        }
-
-        public void SetPorts(List<KubernetesPort> ports)
-        {
             _ports = ports;
-           
+            _env = env;
         }
     }
 }

@@ -5,9 +5,9 @@ namespace KubernetesWorkTest.KubernetesDeployment.Descriptions
 {
     public class PortDescriptions
     {
-        public V1ServicePort BtlStatus => GetPort(1337, Protocol.Tcp, "btl-http", "btl-http");
-        public V1ServicePort BtlMain => GetPort(8082, Protocol.Tcp, "btl-main", "btl-main");
-        public V1ServicePort BtlFluent => GetPort(22428, Protocol.Udp, "btl-fluent", "22428");
+        public V1ServicePort BtlStatus => GetPort(1337, Protocol.TCP, "btl-http", "btl-http");
+        public V1ServicePort BtlMain => GetPort(8082, Protocol.TCP, "btl-main", "btl-main");
+        public V1ServicePort BtlFluent => GetPort(22428, Protocol.UDP, "btl-fluent", "22428");
 
         public IList<V1ServicePort> BtlPortHeadless(ICollection<RoleDescription> roles)
         {
@@ -48,7 +48,7 @@ namespace KubernetesWorkTest.KubernetesDeployment.Descriptions
             {
                 for (int i = 0; i < role.Size; i++)
                 {
-                    list.Add(GetPort(role.StartPort + i, Protocol.Udp,role.Name+i, (role.StartPort + i).ToString()));
+                    list.Add(GetPort(role.StartPort + i, Protocol.UDP,role.Name+i, (role.StartPort + i).ToString()));
                 }
             }
 
@@ -64,7 +64,7 @@ namespace KubernetesWorkTest.KubernetesDeployment.Descriptions
 
     public enum Protocol
     {
-        Tcp,
-        Udp
+        TCP,
+        UDP
     }
 }

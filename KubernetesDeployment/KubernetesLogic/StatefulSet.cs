@@ -1,4 +1,5 @@
 ﻿using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using k8s.Models;
 
@@ -9,11 +10,14 @@ namespace KubernetesWorkTest.KubernetesDeployment.KubernetesLogic
         public V1StatefulSet BuildService(ServerDescription serverDescription, IDictionary<string, string> annotations,
             IDictionary<string, string> selector, string serviceName)
         {
-            var service = BaseService;
+            var service = new V1StatefulSet
+            {
+                ApiVersion = "apps/v1",
+                Kind = "StatefulSet"
+            };
             service.Metadata = new V1ObjectMeta()
             {
                 Name = serverDescription.Name,
-                Labels = serverDescription.Labels,
                 Annotations = annotations,
             };
             service.Spec = new V1StatefulSetSpec()
@@ -21,10 +25,7 @@ namespace KubernetesWorkTest.KubernetesDeployment.KubernetesLogic
                 Replicas = 1,
                 Selector = new V1LabelSelector()
                 {
-                    MatchLabels = new Dictionary<string, string>
-                    {
-                        { "app", "nepomucen" }
-                    }
+                    MatchLabels = serverDescription.Labels
                 },
                 Template = BuildTemplate(serverDescription)
             };
@@ -42,14 +43,24 @@ namespace KubernetesWorkTest.KubernetesDeployment.KubernetesLogic
                 Metadata = new V1ObjectMeta()
                 {
                     CreationTimestamp = null,
-                    Labels = new Dictionary<string, string>
-                    {
-                        { "app", "nepomucen" }
-                    }},
+                    Labels = serverDescription.Labels
+                },
                 Spec = new V1PodSpec
                 {
                     RestartPolicy = "Always",
-                    Containers = new List<V1Container> { BuildContainer(serverDescription) }
+                    Containers = new List<V1Container> { BuildContainer(serverDescription) },
+                    Volumes = new List<V1Volume>
+                    {
+                        new()
+                        {
+                            Name = "server",
+                            PersistentVolumeClaim = new V1PersistentVolumeClaimVolumeSource("rsc-volume",false)
+                        }
+                    },
+                    SecurityContext = new V1PodSecurityContext
+                    {
+                        FsGroup = 1001
+                    }
                 }
             };
             return template;
@@ -59,12 +70,17 @@ namespace KubernetesWorkTest.KubernetesDeployment.KubernetesLogic
         {
             var container = new V1Container
             {
-                Name = $"{serverDescription.IdProject}-center.{serverDescription.Domain}",
-                Image = "gcr.io/kefirdev/btl:0.13.21-9d92e881-303",
-                ImagePullPolicy = "IfNotPresent",
-                Command = new List<string> { "/opt/btl/bin/btl foreground" },
-                Ports = serverDescription.Ports.Select(n => new V1ContainerPort(n.Port, null, null, n.Name, n.Protocol.ToString()))
-                    .ToList(),
+                Name = $"{serverDescription.IdProject}-center-{serverDescription.Domain}",
+                Image = serverDescription.BtlImage,
+                SecurityContext = new V1SecurityContext()
+                {
+                    Capabilities = new V1Capabilities { Drop = new List<string> { "ALL" } },
+                    ReadOnlyRootFilesystem = false,
+                    RunAsNonRoot = true,
+                    RunAsUser = 1001
+                },
+                ImagePullPolicy = "Never",
+                Ports = serverDescription.Ports.Select(n => new V1ContainerPort(n.Port, null, n.Port, n.Name, n.Protocol.ToString())).ToList(),
                 LivenessProbe = new V1Probe
                 {
                     HttpGet = new V1HTTPGetAction()
@@ -96,56 +112,23 @@ namespace KubernetesWorkTest.KubernetesDeployment.KubernetesLogic
                     "/opt/btl/bin/btl",
                     "foreground"
                 },
-                Env = Env(serverDescription.IdProject, serverDescription.Domain),
+                Env = serverDescription.Env.Select(n => new V1EnvVar(n.Key, n.Value)).ToList(),
                 VolumeMounts = new List<V1VolumeMount>
                 {
                     new()
                     {
+                        Name = "server",
                         MountPath = "/opt/server/",
-                        SubPath = "./server_build/"
-                    },
-                    new()
-                    {
-                        MountPath = "/opt/references/",
-                        SubPath = "./server_refs/"
+                        SubPath = "server_build/"
                     }
                 }
             };
             return container;
         }
 
-        private List<V1EnvVar> Env(string id, string domain)
-        {
-            var list = new List<V1EnvVar>
-            {
-                new("CUSTOM_MAIN_CONF", "True"),
-                new("IS_CHEAT_ENABLED", "True"),
-                new("ENV", id),
-                new("PROJECT", "tpso"),
-                new("VERSION", "tpso_version"),
-                new("HOST", $"{id}-center.{domain}"),
-                new("GRAYLOG_SERVER", "127.0.0.1"),
-                new("BTL_HOST", domain),
-                new("RING_SIZE", "64"),
-                new("RIAK_HOSTS", $"{id}-riak"),
-                new("RIAK_CONNECTION_POOL_SIZE", "32"),
-                new("AUTH_SALT", "pCsFG8XQfgD2m76hE1yFvzIAEbwf8Mtb"),
-                new("ROLE_EXE", "/opt/server/Server"),
-                new("ROLE_REFERENCES_PATH", "/opt/references/references_server.dat"),
-                new("DATASETS_LIST", "users public_id_generators public_id_uids"),
-                new("TZ", $"[eu]=$(btl@{id}-region-eu.{domain})"),
-                new("REGIONS_LIST", "Europe/Volgograd"),
-                new("TZ", @$"[user]='[ROLE_ARGS]=$(-type user -logger debug -profiler debug -regions eu) [SIZE]=1 [PORT]=45000' 
-                [public_id_generator] = '[ROLE_ARGS]=$(-type user -logger debug -profiler debug) [SIZE]=1'
-                [public_id_search] = '[ROLE_ARGS]=$(-type user -logger debug -profiler debug) [SIZE]=1' ")
-            };
-            return list;
-        }
         private V1StatefulSet BaseService =>
             new()
             {
-                ApiVersion = "apps/v1",
-                Kind = "StatefulSet"
             };
     }
 }
